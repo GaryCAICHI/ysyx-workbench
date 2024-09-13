@@ -15,6 +15,7 @@
 
 #include <isa.h>
 #include <cpu/cpu.h>
+#include <memory/paddr.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include "sdb.h"
@@ -49,7 +50,81 @@ static int cmd_c(char *args) {
 
 
 static int cmd_q(char *args) {
+  nemu_state.state = NEMU_QUIT;
   return -1;
+}
+
+static int cmd_si(char *args){
+  if (args == NULL){
+    cpu_exec(1);
+  }
+  else{
+    char *endptr = NULL;
+    uint64_t n = 0;
+    n = strtoull(args, &endptr, 10);
+    if (*endptr != '\0'){
+      printf("\"%s\" is not a valid number!\n", args);
+      return 0;
+    }  
+    cpu_exec(n);
+  }
+  return 0;
+}
+
+static int cmd_info(char *args){
+  if (*args == 'r'){
+    isa_reg_display();
+  }
+  else if (*args == 'w'){
+    printf("Function not implemented yet!\n");
+  }
+  else printf("Invalid argument!\n");
+  return 0;
+}
+
+static int cmd_x(char *args){
+  char *endptr = NULL;
+  char *n_char = strtok(NULL, " ");
+  char *paddr_char = strtok(NULL, " ");
+  if (n_char == NULL || paddr_char == NULL){
+    printf("Missing argument(s)!\n");
+    return 0;
+  }
+  
+  if (paddr_char[0] == '0' && (paddr_char[1] == 'x' || paddr_char[1] == 'X')){
+    paddr_char = paddr_char + 2;
+  }
+  
+  paddr_t paddr = 0;
+  if (strtoul(paddr_char, &endptr, 16) < PMEM_LEFT || strtoul(paddr_char, &endptr, 16) > PMEM_RIGHT){
+    printf("Given address overflow!\n");
+    return 0;
+  }
+  else if (*endptr != '\0'){
+    printf("\"%s\" is not a valid number!\n", paddr_char);
+    return 0;
+  }
+  else{
+    paddr = strtoul(paddr_char, &endptr, 16);
+  }
+  
+  uint32_t n = strtoul(n_char, &endptr, 10);
+  if (*endptr != '\0'){
+    printf("\"%s\" is not a valid number!\n", n_char);
+    return 0;
+  }
+  else if (paddr + 4*n - 1 > PMEM_RIGHT)
+  {
+    printf("Memory overflow!\n");
+    return 0;
+  }
+
+  uint8_t *mem = guest_to_host(paddr);
+
+  for(int i = 0; i < n; i++){
+    printf("0x%08X: %02X %02X %02X %02X\n", paddr + 4*i, *(mem + 4*i + 3), *(mem + 4*i + 2), *(mem + 4*i + 1), *(mem + 4*i));
+  }
+  return 0;
 }
 
 static int cmd_help(char *args);
@@ -62,7 +137,9 @@ static struct {
   { "help", "Display information about all supported commands", cmd_help },
   { "c", "Continue the execution of the program", cmd_c },
   { "q", "Exit NEMU", cmd_q },
-
+  { "si", "Single-step execution mode, run given number of instructions, default value is 1", cmd_si },
+  { "info", "r: Print register status\nw: print watchpoint information", cmd_info },
+  { "x", "Take the given hexadecimal number as the starting memory address, and output the contents of N consecutive 4-byte blocks in hexadecimal format", cmd_x },
   /* TODO: Add more commands */
 
 };
